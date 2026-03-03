@@ -1,0 +1,855 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>KiloBase · Weight to KG Converter</title>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Archivo+Black&display=swap" rel="stylesheet"/>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.7.1/ethers.umd.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #0d1117;
+      --surface:   #161b22;
+      --card:      #1c2128;
+      --card2:     #21262d;
+      --border:    #30363d;
+      --accent:    #f0883e;
+      --accent2:   #3fb950;
+      --accent3:   #58a6ff;
+      --text:      #e6edf3;
+      --muted:     #7d8590;
+      --glow-o:    rgba(240,136,62,.18);
+      --glow-g:    rgba(63,185,80,.15);
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Space Grotesk', sans-serif;
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* ── Background ── */
+    .bg-layer {
+      position: fixed; inset: 0; z-index: 0; pointer-events: none;
+      background:
+        radial-gradient(ellipse 65% 55% at 10% 5%,  rgba(240,136,62,.07) 0%, transparent 65%),
+        radial-gradient(ellipse 50% 45% at 90% 90%,  rgba(63,185,80,.05)  0%, transparent 65%),
+        radial-gradient(ellipse 40% 30% at 50% 50%,  rgba(88,166,255,.04) 0%, transparent 60%);
+    }
+
+    /* ── Scanlines ── */
+    .scanlines {
+      position: fixed; inset: 0; z-index: 0; pointer-events: none;
+      background: repeating-linear-gradient(
+        0deg,
+        transparent,
+        transparent 2px,
+        rgba(255,255,255,.012) 2px,
+        rgba(255,255,255,.012) 4px
+      );
+    }
+
+    /* ── Layout ── */
+    .wrap {
+      position: relative; z-index: 1;
+      max-width: 600px;
+      margin: 0 auto;
+      padding: 52px 20px 100px;
+    }
+
+    /* ── Header ── */
+    header {
+      text-align: center;
+      margin-bottom: 44px;
+      animation: fadeDown .65s cubic-bezier(.22,1,.36,1) both;
+    }
+
+    .logo-wrap {
+      position: relative;
+      display: inline-flex;
+      align-items: center; justify-content: center;
+      width: 80px; height: 80px;
+      margin-bottom: 20px;
+    }
+    .logo-ring {
+      position: absolute; inset: 0;
+      border-radius: 50%;
+      border: 1.5px solid var(--accent);
+      animation: rotateSlow 8s linear infinite;
+      opacity: .6;
+    }
+    .logo-ring::before {
+      content: '';
+      position: absolute;
+      top: -3px; left: 50%; transform: translateX(-50%);
+      width: 6px; height: 6px; border-radius: 50%;
+      background: var(--accent);
+    }
+    .logo-inner {
+      width: 56px; height: 56px;
+      background: var(--surface);
+      border-radius: 50%;
+      border: 1.5px solid var(--border);
+      display: flex; align-items: center; justify-content: center;
+    }
+    .logo-inner svg { width: 26px; height: 26px; }
+
+    h1 {
+      font-family: 'Archivo Black', sans-serif;
+      font-size: clamp(2.2rem, 7vw, 3.2rem);
+      letter-spacing: -1px;
+      line-height: 1;
+    }
+    h1 em { font-style: normal; color: var(--accent); }
+
+    .tagline {
+      margin-top: 9px;
+      font-size: .72rem;
+      letter-spacing: .15em;
+      text-transform: uppercase;
+      color: var(--muted);
+      font-weight: 500;
+    }
+
+    .base-badge {
+      display: inline-flex; align-items: center; gap: 7px;
+      margin-top: 14px;
+      background: rgba(240,136,62,.1);
+      border: 1px solid rgba(240,136,62,.25);
+      border-radius: 99px;
+      padding: 5px 16px;
+      font-size: .65rem; color: var(--accent);
+      letter-spacing: .1em; text-transform: uppercase; font-weight: 600;
+    }
+    .base-badge::before {
+      content: '';
+      width: 6px; height: 6px; border-radius: 50%;
+      background: var(--accent);
+      box-shadow: 0 0 6px var(--accent);
+      animation: blink 2s ease-in-out infinite;
+    }
+
+    /* ── Wallet Bar ── */
+    .wallet-bar {
+      display: flex; align-items: center; gap: 12px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 13px 18px;
+      margin-bottom: 10px;
+      animation: fadeUp .55s .1s cubic-bezier(.22,1,.36,1) both;
+    }
+
+    .status-dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: var(--border); flex-shrink: 0;
+      transition: background .4s, box-shadow .4s;
+    }
+    .status-dot.on {
+      background: var(--accent2);
+      box-shadow: 0 0 8px var(--accent2);
+      animation: blink 2s ease-in-out infinite;
+    }
+
+    .wallet-info { flex: 1; min-width: 0; }
+    .wallet-label { font-size: .6rem; color: var(--muted); text-transform: uppercase; letter-spacing: .12em; font-weight: 600; margin-bottom: 2px; }
+    .wallet-addr {
+      font-size: .72rem; color: var(--muted);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      font-family: monospace; transition: color .3s;
+    }
+    .wallet-addr.connected { color: var(--accent2); }
+
+    #connectBtn {
+      flex-shrink: 0;
+      background: var(--accent);
+      color: #000;
+      border: none; border-radius: 8px;
+      padding: 9px 18px;
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: .75rem; font-weight: 700;
+      cursor: pointer;
+      transition: all .2s;
+      white-space: nowrap; letter-spacing: .03em;
+      box-shadow: 0 4px 16px var(--glow-o);
+    }
+    #connectBtn:hover { transform: translateY(-1px); box-shadow: 0 8px 24px var(--glow-o); }
+    #connectBtn:disabled { opacity: .5; cursor: not-allowed; transform: none; }
+
+    /* ── Sign Panel ── */
+    .sign-panel {
+      display: none;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 18px 20px;
+      margin-bottom: 22px;
+      animation: fadeUp .4s cubic-bezier(.22,1,.36,1) both;
+    }
+    .sign-panel.visible { display: block; }
+
+    .sign-title {
+      font-size: .6rem; letter-spacing: .14em; text-transform: uppercase;
+      color: var(--muted); font-weight: 600; margin-bottom: 12px;
+    }
+
+    #signBtn {
+      width: 100%;
+      background: transparent;
+      border: 1px solid var(--accent);
+      border-radius: 8px;
+      color: var(--accent);
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: .78rem; font-weight: 600;
+      padding: 11px; cursor: pointer;
+      transition: all .2s; margin-bottom: 14px;
+    }
+    #signBtn:hover { background: var(--accent); color: #000; box-shadow: 0 4px 16px var(--glow-o); }
+    #signBtn:disabled { opacity: .5; cursor: not-allowed; }
+
+    .sig-box {
+      display: none;
+      background: var(--card2);
+      border: 1px solid var(--border);
+      border-radius: 10px; padding: 14px 16px;
+    }
+    .sig-box.visible { display: block; animation: popIn .4s cubic-bezier(.34,1.56,.64,1) both; }
+
+    .sig-row { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 10px; }
+    .sig-row:last-child { margin-bottom: 0; }
+    .sig-key { font-size: .58rem; color: var(--muted); text-transform: uppercase; letter-spacing: .1em; white-space: nowrap; padding-top: 2px; min-width: 55px; font-weight: 600; }
+    .sig-val { font-size: .68rem; color: var(--accent2); word-break: break-all; line-height: 1.6; flex: 1; font-family: monospace; }
+    .sig-val.hash { color: var(--accent3); }
+
+    .copy-btn {
+      flex-shrink: 0;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 6px; color: var(--muted);
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: .6rem; font-weight: 600;
+      padding: 3px 8px; cursor: pointer;
+      transition: all .15s; white-space: nowrap;
+    }
+    .copy-btn:hover { background: var(--accent3); color: #000; border-color: var(--accent3); }
+
+    .basescan-verify-link {
+      display: inline-flex; align-items: center; gap: 6px;
+      margin-top: 12px; width: 100%; justify-content: center;
+      background: rgba(63,185,80,.07);
+      border: 1px solid rgba(63,185,80,.25);
+      border-radius: 8px; padding: 9px;
+      font-size: .68rem; font-weight: 600; color: var(--accent2);
+      text-decoration: none; transition: all .2s;
+    }
+    .basescan-verify-link:hover { background: rgba(63,185,80,.15); }
+
+    /* ── Main Card ── */
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 34px 30px;
+      box-shadow: 0 20px 60px rgba(0,0,0,.4);
+      animation: fadeUp .55s .2s cubic-bezier(.22,1,.36,1) both;
+      position: relative; overflow: hidden;
+    }
+    .card::before {
+      content: '';
+      position: absolute; top: 0; left: 0; right: 0; height: 2px;
+      background: linear-gradient(90deg, transparent, var(--accent), var(--accent2), transparent);
+    }
+
+    .card-title {
+      font-family: 'Archivo Black', sans-serif;
+      font-size: 1.1rem; margin-bottom: 26px;
+      display: flex; align-items: center; gap: 10px;
+    }
+    .card-icon {
+      width: 34px; height: 34px;
+      background: rgba(240,136,62,.12);
+      border: 1px solid rgba(240,136,62,.2);
+      border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+    }
+
+    /* ── Unit Grid ── */
+    .unit-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 7px; margin-bottom: 24px;
+    }
+
+    .unit-btn {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 9px;
+      color: var(--muted);
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: .7rem; font-weight: 600;
+      padding: 11px 4px;
+      cursor: pointer; text-align: center;
+      transition: all .18s; line-height: 1.4;
+    }
+    .unit-btn small { display: block; font-size: .58rem; font-weight: 400; opacity: .7; margin-top: 2px; }
+    .unit-btn:hover { border-color: var(--accent); color: var(--accent); }
+    .unit-btn.active {
+      background: rgba(240,136,62,.15);
+      border-color: var(--accent);
+      color: var(--accent);
+      box-shadow: 0 0 12px var(--glow-o);
+    }
+
+    /* ── Input ── */
+    .field { margin-bottom: 22px; }
+    label {
+      display: block; font-size: .6rem; letter-spacing: .14em;
+      text-transform: uppercase; color: var(--muted);
+      font-weight: 600; margin-bottom: 8px;
+    }
+    .input-wrap { position: relative; }
+    .input-unit {
+      position: absolute; right: 16px; top: 50%; transform: translateY(-50%);
+      font-size: .78rem; color: var(--muted); pointer-events: none; font-weight: 700;
+    }
+    input[type=number] {
+      width: 100%;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px; color: var(--text);
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 1.6rem; font-weight: 700;
+      padding: 16px 60px 16px 18px;
+      outline: none;
+      transition: border-color .2s, box-shadow .2s;
+      -moz-appearance: textfield;
+    }
+    input::-webkit-outer-spin-button,
+    input::-webkit-inner-spin-button { -webkit-appearance: none; }
+    input:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px var(--glow-o);
+    }
+
+    .arrow-divider {
+      text-align: center; margin: 20px 0;
+      font-size: .7rem; font-weight: 700; letter-spacing: .2em;
+      color: var(--accent); text-transform: uppercase;
+      display: flex; align-items: center; gap: 10px;
+    }
+    .arrow-divider::before, .arrow-divider::after {
+      content: ''; flex: 1; height: 1px; background: var(--border);
+    }
+
+    /* ── Convert Button ── */
+    #convertBtn {
+      width: 100%;
+      background: linear-gradient(135deg, var(--accent) 0%, #e06b1a 100%);
+      color: #000;
+      border: none; border-radius: 12px;
+      padding: 18px;
+      font-family: 'Archivo Black', sans-serif;
+      font-size: 1rem; letter-spacing: .05em;
+      cursor: pointer;
+      transition: all .2s;
+      box-shadow: 0 6px 24px var(--glow-o);
+    }
+    #convertBtn:hover { transform: translateY(-2px); box-shadow: 0 12px 32px var(--glow-o); }
+    #convertBtn:active { transform: translateY(0); }
+    #convertBtn:disabled { opacity: .5; cursor: not-allowed; transform: none; }
+
+    .btn-inner { display: flex; align-items: center; justify-content: center; gap: 10px; }
+
+    /* ── Result ── */
+    #result {
+      margin-top: 26px; display: none;
+      animation: popIn .5s cubic-bezier(.34,1.56,.64,1) both;
+    }
+
+    .result-card {
+      background: linear-gradient(135deg, #1c2128 0%, #21262d 100%);
+      border: 1px solid var(--border);
+      border-radius: 16px; padding: 26px 22px; text-align: center;
+      position: relative; overflow: hidden;
+    }
+    .result-card::after {
+      content: 'KG';
+      position: absolute; right: -10px; bottom: -20px;
+      font-family: 'Archivo Black', sans-serif;
+      font-size: 9rem; color: rgba(240,136,62,.05);
+      line-height: 1; pointer-events: none; letter-spacing: -4px;
+    }
+
+    .result-label {
+      font-size: .6rem; letter-spacing: .18em; text-transform: uppercase;
+      color: var(--muted); font-weight: 600; margin-bottom: 8px;
+    }
+
+    .result-number {
+      font-family: 'Archivo Black', sans-serif;
+      font-size: clamp(2.8rem, 10vw, 4.5rem);
+      color: var(--accent);
+      line-height: 1;
+      text-shadow: 0 0 40px var(--glow-o);
+    }
+
+    .result-unit-label {
+      font-size: .8rem; color: var(--muted); margin-top: 5px; font-weight: 500;
+    }
+
+    .all-conversions {
+      display: grid; grid-template-columns: repeat(2, 1fr);
+      gap: 8px; margin-top: 18px;
+    }
+    .conv-box {
+      background: rgba(255,255,255,.04);
+      border: 1px solid var(--border);
+      border-radius: 10px; padding: 10px 12px; text-align: left;
+    }
+    .conv-box .ck { font-size: .55rem; color: var(--muted); text-transform: uppercase; letter-spacing: .1em; font-weight: 600; margin-bottom: 3px; }
+    .conv-box .cv { font-size: .9rem; color: var(--text); font-weight: 600; }
+
+    .tx-badge {
+      display: none; margin-top: 14px;
+      background: rgba(63,185,80,.07);
+      border: 1px solid rgba(63,185,80,.2);
+      border-radius: 8px; padding: 10px 14px;
+      font-size: .68rem; color: var(--accent2);
+      word-break: break-all; line-height: 1.6; font-family: monospace;
+    }
+    .tx-badge a { color: var(--accent2); text-decoration: underline; }
+
+    /* ── Owner Section ── */
+    .owner-section {
+      margin-top: 22px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px; padding: 18px 20px;
+      animation: fadeUp .55s .35s cubic-bezier(.22,1,.36,1) both;
+    }
+    .owner-row { display: flex; align-items: flex-start; gap: 12px; }
+    .owner-icon {
+      width: 36px; height: 36px; flex-shrink: 0;
+      background: rgba(240,136,62,.1);
+      border: 1px solid rgba(240,136,62,.2);
+      border-radius: 9px;
+      display: flex; align-items: center; justify-content: center; font-size: 1rem;
+    }
+    .owner-text .ok { font-size: .58rem; color: var(--muted); text-transform: uppercase; letter-spacing: .1em; font-weight: 600; }
+    .owner-text .ov { font-size: .7rem; color: var(--accent3); word-break: break-all; margin-top: 3px; font-family: monospace; }
+    .basescan-link {
+      display: inline-block; margin-top: 8px;
+      font-size: .65rem; font-weight: 600; color: var(--accent3);
+      text-decoration: none;
+      border: 1px solid rgba(88,166,255,.25);
+      border-radius: 6px; padding: 4px 10px; transition: all .15s;
+    }
+    .basescan-link:hover { background: rgba(88,166,255,.1); }
+
+    /* ── Footer ── */
+    footer {
+      text-align: center; margin-top: 44px;
+      font-size: .62rem; color: var(--muted);
+      letter-spacing: .1em; text-transform: uppercase; font-weight: 500;
+      animation: fadeUp .55s .5s cubic-bezier(.22,1,.36,1) both;
+    }
+    footer span { color: var(--accent); }
+
+    /* ── Spinner ── */
+    .spinner {
+      display: inline-block; width: 16px; height: 16px;
+      border: 2px solid rgba(0,0,0,.3);
+      border-top-color: #000; border-radius: 50%;
+      animation: spin .6s linear infinite;
+    }
+
+    /* ── Toast ── */
+    #toast {
+      position: fixed; bottom: 26px; left: 50%;
+      transform: translateX(-50%) translateY(60px);
+      background: var(--card2); color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 10px; padding: 11px 22px;
+      font-size: .75rem; font-weight: 600;
+      z-index: 999; opacity: 0;
+      transition: transform .32s cubic-bezier(.22,1,.36,1), opacity .3s;
+      white-space: nowrap; pointer-events: none;
+    }
+    #toast.show { transform: translateX(-50%) translateY(0); opacity: 1; }
+    #toast.error   { border-color: #f85149; color: #f85149; }
+    #toast.success { border-color: var(--accent2); color: var(--accent2); }
+
+    /* ── Keyframes ── */
+    @keyframes fadeDown   { from { opacity:0; transform:translateY(-18px); } to { opacity:1; transform:none; } }
+    @keyframes fadeUp     { from { opacity:0; transform:translateY(18px);  } to { opacity:1; transform:none; } }
+    @keyframes popIn      { from { opacity:0; transform:scale(.93);         } to { opacity:1; transform:none; } }
+    @keyframes spin       { to { transform: rotate(360deg); } }
+    @keyframes blink      { 0%,100%{opacity:1;} 50%{opacity:.3;} }
+    @keyframes rotateSlow { to { transform: rotate(360deg); } }
+
+    @media(max-width:480px){
+      .card { padding: 24px 16px; }
+      .unit-grid { grid-template-columns: repeat(3, 1fr); }
+      .all-conversions { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="bg-layer"></div>
+<div class="scanlines"></div>
+
+<div class="wrap">
+
+  <!-- Header -->
+  <header>
+    <div class="logo-wrap">
+      <div class="logo-ring"></div>
+      <div class="logo-inner">
+        <svg viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M6 3h12l2 7H4L6 3z"/>
+          <path d="M4 10c0 6 2 9 8 11 6-2 8-5 8-11"/>
+          <path d="M12 10v4M10 13h4"/>
+        </svg>
+      </div>
+    </div>
+    <h1>Kilo<em>Base</em></h1>
+    <p class="tagline">Any weight unit → Kilograms · On-Chain</p>
+    <div class="base-badge">Base Blockchain · Mainnet</div>
+  </header>
+
+  <!-- Wallet Bar -->
+  <div class="wallet-bar">
+    <div class="status-dot" id="dot"></div>
+    <div class="wallet-info">
+      <div class="wallet-label">Wallet</div>
+      <div class="wallet-addr" id="walletAddr">Not connected</div>
+    </div>
+    <button id="connectBtn" onclick="connectWallet()">Connect Wallet</button>
+  </div>
+
+  <!-- Sign Panel -->
+  <div class="sign-panel" id="signPanel">
+    <div class="sign-title">✍️ &nbsp;Prove Ownership · Sign a Message</div>
+    <button id="signBtn" onclick="signOwnership()">Sign Message with My Wallet</button>
+    <div class="sig-box" id="sigBox">
+      <div class="sig-row">
+        <span class="sig-key">Message</span>
+        <span class="sig-val" id="sigMessage"></span>
+      </div>
+      <div class="sig-row">
+        <span class="sig-key">Wallet</span>
+        <span class="sig-val" id="sigWallet"></span>
+        <button class="copy-btn" onclick="copyText('sigWallet')">Copy</button>
+      </div>
+      <div class="sig-row">
+        <span class="sig-key">Sig Hash</span>
+        <span class="sig-val hash" id="sigHash"></span>
+        <button class="copy-btn" onclick="copyText('sigHash')">Copy</button>
+      </div>
+      <a class="basescan-verify-link" id="bsVerifyLink" href="#" target="_blank" rel="noopener">
+        🔍 &nbsp;Verify Signature on Basescan ↗
+      </a>
+    </div>
+  </div>
+
+  <!-- Main Card -->
+  <div class="card">
+    <div class="card-title">
+      <div class="card-icon">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2.2" stroke-linecap="round"><path d="M6 3h12l2 7H4L6 3z"/><path d="M4 10c0 6 2 9 8 11 6-2 8-5 8-11"/></svg>
+      </div>
+      Convert Any Weight to KG
+    </div>
+
+    <!-- Unit Selector -->
+    <label style="margin-bottom:10px;">Select Unit to Convert FROM</label>
+    <div class="unit-grid">
+      <button class="unit-btn active" id="u-kg"  onclick="setUnit('kg')">Kilogram<small>kg</small></button>
+      <button class="unit-btn"        id="u-g"   onclick="setUnit('g')">Gram<small>g</small></button>
+      <button class="unit-btn"        id="u-mg"  onclick="setUnit('mg')">Milligram<small>mg</small></button>
+      <button class="unit-btn"        id="u-t"   onclick="setUnit('t')">Metric Ton<small>t</small></button>
+      <button class="unit-btn"        id="u-lb"  onclick="setUnit('lb')">Pound<small>lb</small></button>
+      <button class="unit-btn"        id="u-oz"  onclick="setUnit('oz')">Ounce<small>oz</small></button>
+      <button class="unit-btn"        id="u-st"  onclick="setUnit('st')">Stone<small>st</small></button>
+      <button class="unit-btn"        id="u-lt"  onclick="setUnit('lt')">Long Ton<small>lt</small></button>
+      <button class="unit-btn"        id="u-st2" onclick="setUnit('st2')">Short Ton<small>st</small></button>
+      <button class="unit-btn"        id="u-ct"  onclick="setUnit('ct')">Carat<small>ct</small></button>
+      <button class="unit-btn"        id="u-gr"  onclick="setUnit('gr')">Grain<small>gr</small></button>
+      <button class="unit-btn"        id="u-mcg" onclick="setUnit('mcg')">Microgram<small>μg</small></button>
+    </div>
+
+    <!-- Input -->
+    <div class="field">
+      <label id="inputLabel">Enter Value in Kilograms</label>
+      <div class="input-wrap">
+        <input type="number" id="valueInput" placeholder="e.g. 5.5" min="0" step="any"/>
+        <span class="input-unit" id="unitSymbol">kg</span>
+      </div>
+    </div>
+
+    <div class="arrow-divider">→ Kilograms (KG)</div>
+
+    <!-- Button -->
+    <button id="convertBtn" onclick="convert()">
+      <span class="btn-inner" id="btnInner">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 2v20M2 12l10 10 10-10"/></svg>
+        CONVERT TO KG
+      </span>
+    </button>
+
+    <!-- Result -->
+    <div id="result">
+      <div class="result-card">
+        <div class="result-label">Result in Kilograms</div>
+        <div class="result-number" id="resultNum">—</div>
+        <div class="result-unit-label" id="resultSub"></div>
+        <div class="all-conversions" id="allConv"></div>
+      </div>
+      <div class="tx-badge" id="txBadge"></div>
+    </div>
+  </div>
+
+  <!-- Owner Section -->
+  <div class="owner-section">
+    <div class="owner-row">
+      <div class="owner-icon">🔐</div>
+      <div class="owner-text">
+        <div class="ok">Contract Owner · Verified on Basescan</div>
+        <div class="ov">0x07b43A7546201720f888989C9c3472B228aae505</div>
+        <a class="basescan-link" href="https://basescan.org/address/0x07b43A7546201720f888989C9c3472B228aae505" target="_blank" rel="noopener">
+          View on Basescan ↗
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <footer>
+    Built on <span>Base</span> · Powered by <span>Ethers.js v6</span><br/>
+    <span>KiloBase · All weights. One unit.</span>
+  </footer>
+</div>
+
+<div id="toast"></div>
+
+<script>
+  // ── CONFIG ──────────────────────────────────
+  const CONTRACT_ADDRESS = ""; // ← paste after deploying WeightConverter.sol
+  const OWNER_WALLET     = "0x07b43A7546201720f888989C9c3472B228aae505";
+  const BASE_CHAIN_ID    = "0x2105"; // 8453
+
+  const ABI = [
+    "function convertToKg(uint256 valueScaled, uint8 unit) external returns (uint256 kgScaled)",
+    "function owner() view returns (address)",
+    "event Converted(address indexed user, uint256 valueScaled, uint8 unit, uint256 kgScaled)"
+  ];
+
+  // ── Unit definitions ─────────────────────────
+  // factor = kg per 1 of this unit
+  const UNITS = {
+    kg:  { label: 'Kilograms',   symbol: 'kg',  factor: 1               },
+    g:   { label: 'Grams',       symbol: 'g',   factor: 0.001           },
+    mg:  { label: 'Milligrams',  symbol: 'mg',  factor: 0.000001        },
+    t:   { label: 'Metric Tons', symbol: 't',   factor: 1000            },
+    lb:  { label: 'Pounds',      symbol: 'lb',  factor: 0.453592        },
+    oz:  { label: 'Ounces',      symbol: 'oz',  factor: 0.0283495       },
+    st:  { label: 'Stones',      symbol: 'st',  factor: 6.35029         },
+    lt:  { label: 'Long Tons',   symbol: 'lt',  factor: 1016.05         },
+    st2: { label: 'Short Tons',  symbol: 'st',  factor: 907.185         },
+    ct:  { label: 'Carats',      symbol: 'ct',  factor: 0.0002          },
+    gr:  { label: 'Grains',      symbol: 'gr',  factor: 0.0000647989    },
+    mcg: { label: 'Micrograms',  symbol: 'μg',  factor: 0.000000001     },
+  };
+
+  // ── State ────────────────────────────────────
+  let provider, signer, contract;
+  let currentUnit = 'kg';
+
+  // ── Unit Toggle ──────────────────────────────
+  function setUnit(u) {
+    currentUnit = u;
+    const info = UNITS[u];
+    Object.keys(UNITS).forEach(k => {
+      document.getElementById('u-' + k).classList.toggle('active', k === u);
+    });
+    document.getElementById('inputLabel').textContent = `Enter Value in ${info.label}`;
+    document.getElementById('unitSymbol').textContent = info.symbol;
+    document.getElementById('valueInput').value       = '';
+    document.getElementById('result').style.display   = 'none';
+  }
+
+  // ── Connect Wallet ───────────────────────────
+  async function connectWallet() {
+    if (!window.ethereum) { showToast('Please install MetaMask!', 'error'); return; }
+    try {
+      document.getElementById('connectBtn').disabled    = true;
+      document.getElementById('connectBtn').textContent = 'Connecting…';
+
+      provider = new ethers.BrowserProvider(window.ethereum);
+      await provider.send("eth_requestAccounts", []);
+
+      try {
+        await provider.send("wallet_switchEthereumChain", [{ chainId: BASE_CHAIN_ID }]);
+      } catch(e) {
+        if (e.code === 4902) {
+          await provider.send("wallet_addEthereumChain", [{
+            chainId: BASE_CHAIN_ID,
+            chainName: "Base",
+            nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
+            rpcUrls: ["https://mainnet.base.org"],
+            blockExplorerUrls: ["https://basescan.org"]
+          }]);
+        }
+      }
+
+      signer = await provider.getSigner();
+      const addr = await signer.getAddress();
+      if (CONTRACT_ADDRESS) contract = new ethers.Contract(CONTRACT_ADDRESS, ABI, signer);
+
+      document.getElementById('dot').classList.add('on');
+      const el = document.getElementById('walletAddr');
+      el.textContent = addr.slice(0,6) + '...' + addr.slice(-4);
+      el.classList.add('connected');
+      document.getElementById('connectBtn').textContent       = 'Connected ✓';
+      document.getElementById('connectBtn').style.background  = 'var(--accent2)';
+      document.getElementById('connectBtn').style.color       = '#000';
+      document.getElementById('signPanel').classList.add('visible');
+      showToast('Connected to Base! ✓', 'success');
+    } catch(e) {
+      document.getElementById('connectBtn').disabled    = false;
+      document.getElementById('connectBtn').textContent = 'Connect Wallet';
+      showToast(e.message || 'Connection failed', 'error');
+    }
+  }
+
+  // ── Sign Message ─────────────────────────────
+  async function signOwnership() {
+    if (!signer) { showToast('Connect wallet first.', 'error'); return; }
+    const btn = document.getElementById('signBtn');
+    btn.disabled = true;
+    btn.textContent = 'Signing…';
+    try {
+      const addr    = await signer.getAddress();
+      const dappUrl = window.location.href; // auto-detected URL
+      const message = `Hello that is me the owner of this dapp. ${dappUrl}`;
+
+      const signature = await signer.signMessage(message);
+
+      document.getElementById('sigMessage').textContent = message;
+      document.getElementById('sigWallet').textContent  = addr;
+      document.getElementById('sigHash').textContent    = signature;
+      document.getElementById('bsVerifyLink').href      = `https://basescan.org/address/${addr}`;
+      document.getElementById('sigBox').classList.add('visible');
+      showToast('Signed! ✓ Copy your signature hash.', 'success');
+      btn.textContent = '✅ Signed! Sign Again';
+      btn.disabled    = false;
+    } catch(e) {
+      btn.textContent = 'Sign Message with My Wallet';
+      btn.disabled    = false;
+      showToast(e.code === 4001 ? 'Rejected.' : (e.message || 'Sign failed'), 'error');
+    }
+  }
+
+  // ── Copy Helper ──────────────────────────────
+  function copyText(id) {
+    navigator.clipboard.writeText(document.getElementById(id).textContent)
+      .then(() => showToast('Copied! ✓', 'success'))
+      .catch(() => showToast('Copy failed.', 'error'));
+  }
+
+  // ── Convert ──────────────────────────────────
+  async function convert() {
+    const raw = parseFloat(document.getElementById('valueInput').value);
+    if (!raw || raw <= 0) { showToast('Please enter a valid value.', 'error'); return; }
+
+    setBtnLoading(true);
+    try {
+      const info = UNITS[currentUnit];
+      const kg   = raw * info.factor;
+
+      // Smart formatting
+      const fmt = (n) => {
+        if (n === 0) return '0';
+        if (n >= 1e12) return n.toExponential(4);
+        if (n >= 1)    return parseFloat(n.toFixed(6)).toLocaleString('en-US', { maximumFractionDigits: 6 });
+        return n.toFixed(12).replace(/\.?0+$/, '');
+      };
+
+      document.getElementById('resultNum').textContent = fmt(kg) + ' kg';
+      document.getElementById('resultSub').textContent =
+        `${raw} ${info.symbol} = ${fmt(kg)} kilograms`;
+
+      // All other unit equivalents
+      const html = Object.entries(UNITS)
+        .filter(([k]) => k !== currentUnit)
+        .map(([k, u]) => {
+          const val = kg / u.factor;
+          return `<div class="conv-box">
+            <div class="ck">${u.label}</div>
+            <div class="cv">${fmt(val)} ${u.symbol}</div>
+          </div>`;
+        }).join('');
+      document.getElementById('allConv').innerHTML = html;
+      document.getElementById('result').style.display = 'block';
+
+      // On-chain tx
+      if (contract && signer) {
+        try {
+          showToast('Sending to Base…');
+          const unitIndex = Object.keys(UNITS).indexOf(currentUnit);
+          const scaled    = BigInt(Math.round(raw * 1e6));
+          const tx        = await contract.convertToKg(scaled, unitIndex);
+          const receipt   = await tx.wait();
+          const badge     = document.getElementById('txBadge');
+          badge.style.display = 'block';
+          badge.innerHTML = `✓ Recorded on Base · <a href="https://basescan.org/tx/${receipt.hash}" target="_blank">View on Basescan ↗</a>`;
+          showToast('On-chain tx confirmed! ✓', 'success');
+        } catch(_) {
+          showToast('Converted! Deploy contract for on-chain recording.', '');
+        }
+      } else {
+        showToast('Converted! Connect wallet for on-chain recording.', '');
+      }
+    } catch(e) {
+      showToast(e.message || 'Error', 'error');
+    }
+    setBtnLoading(false);
+  }
+
+  // ── UI Helpers ───────────────────────────────
+  function setBtnLoading(on) {
+    const btn = document.getElementById('convertBtn');
+    btn.disabled = on;
+    document.getElementById('btnInner').innerHTML = on
+      ? '<span class="spinner"></span>'
+      : `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 2v20M2 12l10 10 10-10"/></svg> CONVERT TO KG`;
+  }
+
+  let toastTimer;
+  function showToast(msg, type = '') {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.className   = 'show ' + (type === 'error' ? 'error' : type === 'success' ? 'success' : '');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => { t.className = ''; }, 3500);
+  }
+
+  // ── Auto-connect ─────────────────────────────
+  window.addEventListener('load', async () => {
+    if (window.ethereum) {
+      try {
+        const accounts = await window.ethereum.request({ method: 'eth_accounts' });
+        if (accounts.length > 0) connectWallet();
+      } catch(_) {}
+    }
+  });
+</script>
+</body>
+</html>
